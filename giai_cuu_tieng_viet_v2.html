@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>🆘 Giải cứu tiếng Việt — Game chính tả</title>
+  <style>
+    :root{
+      --bg1:#F3F7EE; --bg2:#FFFFFF;
+      --emerald:#059669; --emerald-50:#ecfdf5;
+      --rose:#ef4444; --slate:#334155; --muted:#64748b;
+      --border:#cce3d5; --card:#ffffff;
+    }
+    html,body{margin:0;height:100%;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:var(--slate);}
+    body{background:linear-gradient(180deg,var(--bg1),var(--bg2) 40%, var(--bg1));}
+    .container{max-width:1050px;margin:0 auto;padding:16px;}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:24px;box-shadow:0 10px 30px rgba(31,112,67,.08);padding:20px;}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+    .pill{border:1px solid #bfe3d0;background:#f0fff4;border-radius:999px;padding:4px 10px;font-size:14px}
+    .btn{border:0;border-radius:12px;padding:10px 14px;font-weight:800;cursor:pointer}
+    .btn-emerald{background:var(--emerald);color:white}
+    .btn-emerald-ghost{background:var(--emerald-50);border:1px solid #a7f3d0;color:#065f46}
+    .btn-gray{background:#e5e7eb;color:#111827}
+    .grid{display:grid;gap:12px}
+    @media(min-width:900px){.grid-4{grid-template-columns:repeat(4,1fr)}}
+    .station{opacity:1; transition:opacity .2s; padding:16px;border:1px solid #bee3cd;background:#f0fff9;border-radius:18px}
+    .station.disabled{opacity:0.45; pointer-events:none;}
+    .hide{display:none}
+    .hint{font-size:12px;color:var(--muted)}
+    .title{font-size:20px;font-weight:900;color:#065f46}
+    .subtitle{font-size:12px;color:#0f766e}
+    .big{font-size:22px;font-weight:900;color:#0f172a;line-height:1.25}
+    .win{background:#ecfeff;border-color:#a5f3fc}
+    .lose{background:#fff1f2;border-color:#fecdd3}
+    .divider{height:1px;background:#e2e8f0;margin:14px 0;border-radius:999px}
+    input[type="text"]{width:100%;border-radius:14px;border:1px solid #cbd5e1;padding:10px;font-size:16px}
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="card">
+    <div class="row" style="margin-bottom:8px">
+      <div>
+        <div style="font-size:24px;font-weight:900;color:#065f46" id="appTitle">🆘 Giải cứu tiếng Việt</div>
+        <div class="subtitle" id="appSubtitle">4 trạm: Âm chuẩn • Từ đúng • Hách não • Thông thái</div>
+      </div>
+
+      <div class="row" style="gap:8px">
+        <div class="pill">Điểm: <b id="score">0</b></div>
+        <div class="pill">Huy hiệu: <b id="badgesCount">0</b></div>
+
+        <div class="row" style="gap:6px">
+          <span class="hint">Giọng:</span>
+          <button class="btn btn-emerald-ghost" id="maleBtn">Nam</button>
+          <button class="btn btn-emerald-ghost" id="femaleBtn">Nữ</button>
+          <button class="btn btn-emerald-ghost" id="tryVoiceBtn">🔊 Thử tiếng</button>
+        </div>
+
+        <button class="btn btn-emerald" id="homeBtn" disabled>🏠 Trang chính</button>
+        <button class="btn btn-gray" id="resetBtn" title="Xóa tiến độ trên máy này">Reset</button>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div id="screenMap">
+      <p class="hint">Chọn trạm để bắt đầu. Hoàn thành trạm sẽ mở khóa trạm kế tiếp.</p>
+      <div class="grid grid-4" id="mapStations"></div>
+    </div>
+
+    <div id="screenStation" class="hide">
+      <div class="title" id="stationTitle">Trạm</div>
+      <div class="station" id="stationCard"></div>
+    </div>
+
+    <div class="hint" style="margin-top:10px">Trạng thái âm thanh: <span id="ttsState">Sẵn sàng</span></div>
+  </div>
+</div>
+
+<script>
+const CONFIG = {
+  title: "🆘 Giải cứu tiếng Việt",
+  subtitle: "4 trạm: Âm chuẩn • Từ đúng • Hách não • Thông thái",
+  lang: "vi-VN",
+  stations: [
+    { id:"amchuan",  icon:"🎧", name:"Âm chuẩn",  desc:"Chọn từ đúng chính tả",              type:"mcq",  rounds:30 },
+    { id:"tudung",   icon:"✅", name:"Từ hay",   desc:"Chọn từ đúng trong câu",            type:"mcq",  rounds:30 },
+    { id:"hachnao",  icon:"🧠", name:"Hách não",  desc:"Giữ nguyên bộ câu hỏi trạm 3",      type:"mcq",  rounds:30 },
+    { id:"thongthai",icon:"🎓", name:"Thông thái",desc:"Điền từ đúng chính tả (gõ đáp án)", type:"fill", rounds:30 },
+  ],
+  banks: {
+    amchuan: [{"q": "Chọn từ đúng:", "choices": ["Làm", "Nàm"], "correct": "Làm"}, {"q": "Chọn từ đúng:", "choices": ["Lúa", "Núa"], "correct": "Lúa"}, {"q": "Chọn từ đúng:", "choices": ["Chân", "Trân"], "correct": "Chân"}, {"q": "Chọn từ đúng:", "choices": ["Dữ", "Giữ", "rữ"], "correct": "Giữ"}, {"q": "Chọn từ đúng:", "choices": ["Rơm", "giơm", "dơm"], "correct": "Rơm"}, {"q": "Chọn từ đúng:", "choices": ["Rủ", "giủ", "dủ"], "correct": "Rủ"}, {"q": "Chọn từ đúng:", "choices": ["Trêu", "chêu"], "correct": "Trêu"}, {"q": "Chọn từ đúng:", "choices": ["Tròn", "chòn"], "correct": "Tròn"}, {"q": "Chọn từ đúng:", "choices": ["Chờ", "trờ"], "correct": "Chờ"}, {"q": "Chọn từ đúng:", "choices": ["Chùa", "trùa"], "correct": "Chùa"}, {"q": "Chọn từ đúng:", "choices": ["Truyên", "chuyên"], "correct": "chuyên"}, {"q": "Chọn từ đúng:", "choices": ["Sặc", "xặc"], "correct": "Sặc"}, {"q": "Chọn từ đúng:", "choices": ["Sắn", "xắn"], "correct": "Sắn"}, {"q": "Chọn từ đúng:", "choices": ["Sấy", "xấy"], "correct": "Sấy"}, {"q": "Chọn từ đúng:", "choices": ["Xích", "sích"], "correct": "Xích"}, {"q": "Chọn từ đúng:", "choices": ["Nổ", "lổ"], "correct": "Nổ"}, {"q": "Chọn từ đúng:", "choices": ["Nổi", "lổi"], "correct": "Nổi"}, {"q": "Chọn từ đúng:", "choices": ["Lợn", "nợn"], "correct": "Lợn"}, {"q": "Chọn từ đúng:", "choices": ["Lụt", "nụt"], "correct": "Lụt"}, {"q": "Chọn từ đúng:", "choices": ["Lưỡi", "nưỡi"], "correct": "Lưỡi"}, {"q": "Chọn từ đúng:", "choices": ["Nứt", "lứt"], "correct": "Nứt"}, {"q": "Chọn từ đúng:", "choices": ["Sặc", "xặc"], "correct": "Sặc"}, {"q": "Chọn từ đúng:", "choices": ["Làm", "Nàm"], "correct": "Làm"}, {"q": "Chọn từ đúng:", "choices": ["Lúa", "Núa"], "correct": "Lúa"}, {"q": "Chọn từ đúng:", "choices": ["Chân", "Trân"], "correct": "Chân"}, {"q": "Chọn từ đúng:", "choices": ["Dữ", "Giữ", "rữ"], "correct": "Giữ"}, {"q": "Chọn từ đúng:", "choices": ["Rơm", "giơm", "dơm"], "correct": "Rơm"}, {"q": "Chọn từ đúng:", "choices": ["Rủ", "giủ", "dủ"], "correct": "Rủ"}, {"q": "Chọn từ đúng:", "choices": ["Trêu", "chêu"], "correct": "Trêu"}, {"q": "Chọn từ đúng:", "choices": ["Tròn", "chòn"], "correct": "Tròn"}],
+    tudung: [{"q": "Tiếng chim hót ……… buổi sáng.", "choices": ["líu lo", "níu no", "líu no", "níu lo"], "correct": "líu lo"}, {"q": "Trời mưa to làm con đường trở nên ………", "choices": ["trơn trượt", "trơn truột", "chơn trượt", "chơn truột"], "correct": "trơn trượt"}, {"q": "Tiếng chim hót ……… buổi sáng.", "choices": ["líu lo", "níu no", "líu no", "níu lo"], "correct": "líu lo"}, {"q": "Cô giáo giảng bài rất ………", "choices": ["rõ ràng", "rõ dàng", "dõ ràng", "dõ dàng"], "correct": "rõ ràng"}, {"q": "Cơn gió nhẹ làm lá cây ………", "choices": ["xào xạc", "sao sạc", "xao xạc", "xào sạc"], "correct": "xào xạc"}, {"q": "Chúng ta cần giữ gìn môi trường ………", "choices": ["sạch sẽ", "sạch sẻ", "sặc sẽ", "sạch xẽ"], "correct": "sạch sẽ"}, {"q": "Bạn Nam có giọng đọc rất ………", "choices": ["truyền cảm", "chuyền cảm", "truyền cãm", "chuyền cãm"], "correct": "truyền cảm"}, {"q": "Những bông hoa khoe sắc ………", "choices": ["rực rỡ", "rực rỡ", "rực dỡ", "rực rở"], "correct": "rực rỡ"}, {"q": "Em luôn ……… lời hứa của mình.", "choices": ["giữ", "dử", "dữ", "dự"], "correct": "giữ"}, {"q": "Con đường làng quanh co, ………", "choices": ["khúc khuỷu", "khúc khủy", "khúc khuỷ", "khúc khỉu"], "correct": "khúc khuỷu"}, {"q": "Em bé ngủ rất ………", "choices": ["say sưa", "say xưa", "sai sưa", "say sua"], "correct": "say sưa"}, {"q": "Chú bộ đội đứng gác rất ………", "choices": ["nghiêm trang", "nghiêm trăng", "nghiêm chăng", "nghiêm chang"], "correct": "nghiêm trang"}, {"q": "Em bé có đôi mắt rất ………", "choices": ["long lanh", "nong nanh", "long nanh", "nong lanh"], "correct": "long lanh"}, {"q": "Tiếng trống trường vang lên ………", "choices": ["rộn ràng", "dộn dàng", "rộn dàng", "dộn ràng"], "correct": "rộn ràng"}, {"q": "Tiếng chim hót ……… buổi sáng.", "choices": ["líu lo", "níu no", "líu no", "níu lo"], "correct": "líu lo"}, {"q": "Trời mưa to làm con đường trở nên ………", "choices": ["trơn trượt", "trơn truột", "chơn trượt", "chơn truột"], "correct": "trơn trượt"}, {"q": "Tiếng chim hót ……… buổi sáng.", "choices": ["líu lo", "níu no", "líu no", "níu lo"], "correct": "líu lo"}, {"q": "Cô giáo giảng bài rất ………", "choices": ["rõ ràng", "rõ dàng", "dõ ràng", "dõ dàng"], "correct": "rõ ràng"}, {"q": "Cơn gió nhẹ làm lá cây ………", "choices": ["xào xạc", "sao sạc", "xao xạc", "xào sạc"], "correct": "xào xạc"}, {"q": "Chúng ta cần giữ gìn môi trường ………", "choices": ["sạch sẽ", "sạch sẻ", "sặc sẽ", "sạch xẽ"], "correct": "sạch sẽ"}, {"q": "Bạn Nam có giọng đọc rất ………", "choices": ["truyền cảm", "chuyền cảm", "truyền cãm", "chuyền cãm"], "correct": "truyền cảm"}, {"q": "Những bông hoa khoe sắc ………", "choices": ["rực rỡ", "rực rỡ", "rực dỡ", "rực rở"], "correct": "rực rỡ"}, {"q": "Em luôn ……… lời hứa của mình.", "choices": ["giữ", "dử", "dữ", "dự"], "correct": "giữ"}, {"q": "Con đường làng quanh co, ………", "choices": ["khúc khuỷu", "khúc khủy", "khúc khuỷ", "khúc khỉu"], "correct": "khúc khuỷu"}, {"q": "Em bé ngủ rất ………", "choices": ["say sưa", "say xưa", "sai sưa", "say sua"], "correct": "say sưa"}, {"q": "Chú bộ đội đứng gác rất ………", "choices": ["nghiêm trang", "nghiêm trăng", "nghiêm chăng", "nghiêm chang"], "correct": "nghiêm trang"}, {"q": "Em bé có đôi mắt rất ………", "choices": ["long lanh", "nong nanh", "long nanh", "nong lanh"], "correct": "long lanh"}, {"q": "Tiếng trống trường vang lên ………", "choices": ["rộn ràng", "dộn dàng", "rộn dàng", "dộn ràng"], "correct": "rộn ràng"}, {"q": "Tiếng chim hót ……… buổi sáng.", "choices": ["líu lo", "níu no", "líu no", "níu lo"], "correct": "líu lo"}, {"q": "Trời mưa to làm con đường trở nên ………", "choices": ["trơn trượt", "trơn truột", "chơn trượt", "chơn truột"], "correct": "trơn trượt"}],
+    // Trạm 3 giữ nguyên bộ câu hỏi (lấy từ bản game trước)
+    hachnao: [{"q": "Mẹ dặn mua ... gạo.", "choices": ["lò", "nò", "lọ", "no"], "correct": "lọ"}, {"q": "Bạn ấy ...i xe rất giỏi.", "choices": ["lả", "lái", "nái", "nải"], "correct": "lái"}, {"q": "Trời ... nóng.", "choices": ["nắng", "lắng"], "correct": "nắng"}, {"q": "Mẹ dặn mua ... gạo.", "choices": ["lò", "nò", "lọ", "no"], "correct": "lọ"}, {"q": "Bạn ấy ...i xe rất giỏi.", "choices": ["lả", "lái", "nái", "nải"], "correct": "lái"}, {"q": "Trời ... nóng.", "choices": ["nắng", "lắng"], "correct": "nắng"}, {"q": "Mẹ dặn mua ... gạo.", "choices": ["lò", "nò", "lọ", "no"], "correct": "lọ"}, {"q": "Bạn ấy ...i xe rất giỏi.", "choices": ["lả", "lái", "nái", "nải"], "correct": "lái"}, {"q": "Trời ... nóng.", "choices": ["nắng", "lắng"], "correct": "nắng"}, {"q": "Mẹ dặn mua ... gạo.", "choices": ["lò", "nò", "lọ", "no"], "correct": "lọ"}, {"q": "Bạn ấy ...i xe rất giỏi.", "choices": ["lả", "lái", "nái", "nải"], "correct": "lái"}, {"q": "Trời ... nóng.", "choices": ["nắng", "lắng"], "correct": "nắng"}, {"q": "Mẹ dặn mua ... gạo.", "choices": ["lò", "nò", "lọ", "no"], "correct": "lọ"}, {"q": "Bạn ấy ...i xe rất giỏi.", "choices": ["lả", "lái", "nái", "nải"], "correct": "lái"}, {"q": "Trời ... nóng.", "choices": ["nắng", "lắng"], "correct": "nắng"}, {"q": "Mẹ dặn mua ... gạo.", "choices": ["lò", "nò", "lọ", "no"], "correct": "lọ"}, {"q": "Bạn ấy ...i xe rất giỏi.", "choices": ["lả", "lái", "nái", "nải"], "correct": "lái"}, {"q": "Trời ... nóng.", "choices": ["nắng", "lắng"], "correct": "nắng"}, {"q": "Mẹ dặn mua ... gạo.", "choices": ["lò", "nò", "lọ", "no"], "correct": "lọ"}, {"q": "Bạn ấy ...i xe rất giỏi.", "choices": ["lả", "lái", "nái", "nải"], "correct": "lái"}, {"q": "Trời ... nóng.", "choices": ["nắng", "lắng"], "correct": "nắng"}, {"q": "Mẹ dặn mua ... gạo.", "choices": ["lò", "nò", "lọ", "no"], "correct": "lọ"}, {"q": "Bạn ấy ...i xe rất giỏi.", "choices": ["lả", "lái", "nái", "nải"], "correct": "lái"}, {"q": "Trời ... nóng.", "choices": ["nắng", "lắng"], "correct": "nắng"}, {"q": "Mẹ dặn mua ... gạo.", "choices": ["lò", "nò", "lọ", "no"], "correct": "lọ"}, {"q": "Bạn ấy ...i xe rất giỏi.", "choices": ["lả", "lái", "nái", "nải"], "correct": "lái"}, {"q": "Trời ... nóng.", "choices": ["nắng", "lắng"], "correct": "nắng"}, {"q": "Mẹ dặn mua ... gạo.", "choices": ["lò", "nò", "lọ", "no"], "correct": "lọ"}, {"q": "Bạn ấy ...i xe rất giỏi.", "choices": ["lả", "lái", "nái", "nải"], "correct": "lái"}, {"q": "Trời ... nóng.", "choices": ["nắng", "lắng"], "correct": "nắng"}],
+    thongthai: [{"q": "Tuổi trẻ cần xác định rõ ___ sống để định hướng tương lai.", "answers": ["lý tưởng"]}, {"q": "Việc học tập suốt đời là một yêu cầu ___ yếu của xã hội hiện đại.", "answers": ["tất", "tất yếu"]}, {"q": "Mỗi học sinh cần có ý thức ___ nhiệm với bản thân và cộng đồng.", "answers": ["trách", "trách nhiệm"]}, {"q": "Thành công không đến từ may mắn mà từ sự ___ bền bỉ.", "answers": ["nỗ lực"]}, {"q": "Lòng ___ ái là nền tảng của đạo đức con người.", "answers": ["nhân", "nhân ái"]}, {"q": "Giao tiếp hiệu quả giúp con người dễ dàng ___ lập các mối quan hệ.", "answers": ["thiết", "thiết lập"]}, {"q": "Nhà trường có vai trò quan trọng trong việc hình thành ___ cách học sinh.", "answers": ["nhân", "nhân cách"]}, {"q": "Sự trung thực là phẩm chất cần ___ trong thi cử và học tập.", "answers": ["có", "cần có"]}, {"q": "Học sinh cần biết ___ trọng ý kiến của người khác.", "answers": ["tôn", "tôn trọng"]}, {"q": "Việc lạm dụng mạng xã hội có thể gây ra nhiều ___ quả tiêu cực.", "answers": ["hậu", "hậu quả"]}, {"q": "Mỗi người cần có thái độ sống ___ quan trước những khó khăn.", "answers": ["lạc", "lạc quan"]}, {"q": "Tinh thần đoàn ___ là sức mạnh của tập thể.", "answers": ["kết", "đoàn kết"]}, {"q": "Lối sống thiếu ___ nhiệm sẽ gây nhiều hệ lụy.", "answers": ["trách", "trách nhiệm"]}, {"q": "Kiến thức là hành trang ___ thiết cho tương lai.", "answers": ["cần", "cần thiết"]}, {"q": "Học sinh cần rèn luyện khả năng ___ duy phản biện.", "answers": ["tư", "tư duy"]}, {"q": "Việc xác định mục tiêu rõ ràng sẽ tạo động ___ học tập.", "answers": ["lực", "động lực"]}, {"q": "Thầy cô luôn là người ___ dắt học sinh trên con đường tri thức.", "answers": ["dẫn", "dẫn dắt"]}, {"q": "Thành công đòi hỏi quá trình nỗ lực lâu ___, bền bỉ.", "answers": ["dài", "lâu dài"]}, {"q": "Học sinh không nên có thái độ ___ ỷ lại vào người khác.", "answers": ["thụ", "thụ động"]}, {"q": "Việc đọc sách giúp mở ___ tầm hiểu biết.", "answers": ["rộng", "mở rộng"]}, {"q": "Môi trường học đường cần được xây dựng lành ___ và an toàn.", "answers": ["mạnh", "lành mạnh"]}, {"q": "Tuổi trẻ cần sống có ước mơ và ___ vọng.", "answers": ["hoài", "hoài vọng"]}, {"q": "Sự khác biệt cần được ___ trọng trong xã hội hiện đại.", "answers": ["tôn", "tôn trọng"]}, {"q": "Giáo dục đóng vai trò then ___ trong sự phát triển con người.", "answers": ["chốt", "then chốt"]}, {"q": "Học sinh cần chủ động ___ thu kiến thức mới.", "answers": ["tiếp", "tiếp thu"]}, {"q": "Quản lí thời gian hợp lí giúp nâng cao hiệu ___ học tập.", "answers": ["quả", "hiệu quả"]}, {"q": "Thái độ học tập nghiêm túc là yếu tố ___ định kết quả.", "answers": ["quyết", "quyết định"]}, {"q": "Mỗi cá nhân cần có ý thức bảo vệ môi trường sống xung ___.", "answers": ["quanh", "xung quanh"]}, {"q": "Sự kiên trì là chìa khóa dẫn đến thành ___.", "answers": ["công", "thành công"]}, {"q": "Tuổi trẻ cần xác định rõ ___ sống để định hướng tương lai.", "answers": ["lý tưởng"]}],
+  }
+};
+
+const STORAGE_KEY = "giai_cuu_tieng_viet_v1";
+const defaultState = () => ({
+  score: 0,
+  badges: [],
+  done: Object.fromEntries(CONFIG.stations.map((s,i)=>[s.id,false])),
+  unlocked: Object.fromEntries(CONFIG.stations.map((s,i)=>[s.id, i===0])),
+  voiceGender: "male",
+});
+let state = loadState();
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return defaultState();
+    const parsed = JSON.parse(raw);
+    const d = defaultState();
+    return {
+      ...d,
+      ...parsed,
+      done: { ...d.done, ...(parsed.done||{}) },
+      unlocked: { ...d.unlocked, ...(parsed.unlocked||{}) },
+    };
+  }catch{ return defaultState(); }
+}
+function saveState(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch{} }
+function resetState(){ state = defaultState(); saveState(); updateHUD(); renderMap(); showScreen("map"); }
+
+const scoreEl = document.getElementById("score");
+const badgesCountEl = document.getElementById("badgesCount");
+const ttsState = document.getElementById("ttsState");
+const homeBtn = document.getElementById("homeBtn");
+
+function updateHUD(){
+  scoreEl.textContent = String(state.score||0);
+  badgesCountEl.textContent = String((state.badges||[]).length);
+  document.getElementById("appTitle").textContent = CONFIG.title;
+  document.getElementById("appSubtitle").textContent = CONFIG.subtitle;
+}
+function showScreen(which){
+  const map = document.getElementById("screenMap");
+  const station = document.getElementById("screenStation");
+  if(which==="map"){ map.classList.remove("hide"); station.classList.add("hide"); homeBtn.disabled=true; }
+  else{ map.classList.add("hide"); station.classList.remove("hide"); homeBtn.disabled=false; }
+}
+
+let voices = [];
+let currentVoice = null;
+function loadVoices(){ try{ voices = window.speechSynthesis.getVoices() || []; }catch{ voices=[]; } pickByGender(state.voiceGender||"male"); }
+function pickByGender(gender){
+  state.voiceGender = gender;
+  const vi = voices.filter(v => /vi|vietnam/i.test(v.lang||v.name));
+  const list = vi.length ? vi : voices;
+  const want = gender==="male" ? /(male|nam|man)/i : /(female|nu|woman)/i;
+  currentVoice = list.find(v=> want.test(v.name)) || list[0] || null;
+  saveState();
+}
+function speak(text){
+  try{
+    const synth = window.speechSynthesis; if(!synth) return;
+    try{ synth.cancel(); }catch{}
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = CONFIG.lang;
+    if(currentVoice) u.voice = currentVoice;
+    u.rate = 0.95; u.volume = 1;
+    u.onstart = ()=> ttsState.textContent = "Đang phát...";
+    u.onend = ()=> ttsState.textContent = "Sẵn sàng";
+    u.onerror = ()=> ttsState.textContent = "Sẵn sàng";
+    synth.speak(u);
+  }catch{}
+}
+
+function speakSequence(parts){
+  try{
+    const synth = window.speechSynthesis; if(!synth) return;
+    try{ synth.cancel(); }catch{}
+    const arr = (parts||[]).map(x=>String(x||"").trim()).filter(Boolean);
+    if(arr.length===0) return;
+    let i = 0;
+    const sayNext = ()=>{
+      const u = new SpeechSynthesisUtterance(arr[i]);
+      u.lang = CONFIG.lang;
+      if(currentVoice) u.voice = currentVoice;
+      u.rate = 0.95; u.volume = 1;
+      u.onstart = ()=> ttsState.textContent = "Đang phát...";
+      u.onend = ()=>{
+        i++;
+        if(i < arr.length) sayNext();
+        else ttsState.textContent = "Sẵn sàng";
+      };
+      u.onerror = ()=>{
+        i++;
+        if(i < arr.length) sayNext();
+        else ttsState.textContent = "Sẵn sàng";
+      };
+      synth.speak(u);
+    };
+    sayNext();
+  }catch{}
+}
+
+if (window.speechSynthesis && "onvoiceschanged" in window.speechSynthesis) {
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+}
+setTimeout(loadVoices, 200);
+setTimeout(loadVoices, 800);
+
+function renderMap(){
+  const wrap = document.getElementById("mapStations");
+  wrap.innerHTML = "";
+  CONFIG.stations.forEach((s)=>{
+    const div = document.createElement("div");
+    div.className = "station" + (state.unlocked[s.id] ? "" : " disabled");
+    const btn = document.createElement("button");
+    btn.className = "btn btn-emerald";
+    btn.textContent = state.done[s.id] ? "✅ Đã xong" : "Vào trạm";
+    btn.disabled = !state.unlocked[s.id];
+    btn.addEventListener("click", ()=> startStation(s.id));
+    div.innerHTML = `<div class="title">${s.icon} ${s.name}</div><div class="hint">${s.desc}</div>`;
+    div.appendChild(btn);
+    wrap.appendChild(div);
+  });
+}
+
+let currentStation = null;
+let round = 0;
+let right = 0;
+
+function stationHeader(){
+  return `
+    <div class="hint">Lượt <b>${round+1}</b>/30 • Đúng: <b>${right}</b></div>
+    <div class="divider"></div>
+  `;
+}
+function givePoints(p){ state.score=(state.score||0)+p; saveState(); updateHUD(); }
+function finishStation(){
+  if(!state.done[currentStation.id]){
+    state.done[currentStation.id] = true;
+    state.badges.push(`Đã qua ${currentStation.name}`);
+    const idx = CONFIG.stations.findIndex(x=>x.id===currentStation.id);
+    const next = CONFIG.stations[idx+1];
+    if(next) state.unlocked[next.id] = true;
+    saveState();
+  }
+  updateHUD(); renderMap(); showScreen("map");
+}
+function startStation(id){
+  currentStation = CONFIG.stations.find(s=>s.id===id);
+  round = 0; right = 0;
+  document.getElementById("stationTitle").textContent = `${currentStation.icon} ${currentStation.name} — ${currentStation.desc}`;
+  showScreen("station");
+  renderRound();
+}
+
+function norm(s){ return (s||"").trim().replace(/\s+/g," ").toLowerCase(); }
+
+function renderRound(){
+  const card = document.getElementById("stationCard");
+  if(currentStation.type==="mcq") return renderMCQ(card);
+  if(currentStation.type==="fill") return renderFill(card);
+}
+
+function renderMCQ(card){
+  const bank = CONFIG.banks[currentStation.id] || [];
+  const item = bank[round % bank.length];
+  const isPronounceStation = currentStation.id === "amchuan";
+
+  const choices = (item.choices||[]).map(c=>{
+    const esc = String(c).replace(/"/g,'&quot;');
+    if(isPronounceStation){
+      return `
+        <div class="row" style="justify-content:flex-start;gap:6px">
+          <button class="btn btn-emerald-ghost playWord" data-w="${esc}" title="Nghe phát âm">🔊</button>
+          <button class="btn btn-emerald-ghost mcqBtn" data-c="${esc}">${c}</button>
+        </div>
+      `;
+    }
+    return `<button class="btn btn-emerald-ghost mcqBtn" data-c="${esc}">${c}</button>`;
+  }).join("");
+
+  card.innerHTML = stationHeader() + `
+    <div class="big">${item.q}</div>
+    ${isPronounceStation ? `<div class="hint">Bấm 🔊 để nghe phát âm từng từ, rồi chọn từ đúng.</div>` : ``}
+    <div class="row" style="justify-content:flex-start;gap:8px;margin-top:10px;flex-wrap:wrap" id="mcqWrap">${choices}</div>
+    <div class="row" style="justify-content:flex-start;gap:8px;margin-top:10px">
+      <button class="btn btn-emerald-ghost" id="playQ">${isPronounceStation ? "🔊 Nghe phát âm" : "🔊 Nghe câu"}</button>
+    </div>
+    <div id="reveal" class="hide" style="margin-top:10px"></div>
+  `;
+
+  // Play question / words
+  card.querySelector("#playQ").addEventListener("click", ()=>{
+    if(isPronounceStation) speakSequence(item.choices || []);
+    else speak(String(item.q||"").replace(/…+/g,""));
+  });
+
+  // Individual word pronunciation (station 1)
+  card.querySelectorAll(".playWord").forEach(btn=>{
+    btn.addEventListener("click", (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      const w = btn.getAttribute("data-w") || "";
+      speak(w);
+    });
+  });
+
+  card.querySelectorAll(".mcqBtn").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const c = btn.getAttribute("data-c");
+      const ok = (c === item.correct);
+      const box = card.querySelector("#reveal");
+      box.className = ok ? "win station" : "lose station";
+      box.innerHTML = `
+        <div>Kết quả: ${ok ? "Đúng ✅" : "Sai ❌"}</div>
+        <div class="hint">Đáp án: <b>${item.correct}</b></div>
+        <div class="row" style="justify-content:flex-start;margin-top:10px;gap:8px">
+          <button class="btn btn-gray" id="nextBtn">Câu tiếp theo</button>
+          <button class="btn btn-emerald-ghost" id="homeNow">Về bản đồ</button>
+        </div>
+      `;
+      if(ok){ right++; givePoints(5); }
+      box.querySelector("#homeNow").addEventListener("click", finishStation, {once:true});
+      box.querySelector("#nextBtn").addEventListener("click", ()=>{
+        round++;
+        if(round >= 30){ finishStation(); return; }
+        renderRound();
+      }, {once:true});
+    });
+  });
+}
+
+function renderFill(card){
+  const bank = CONFIG.banks[currentStation.id] || [];
+  const item = bank[round % bank.length];
+  card.innerHTML = stationHeader() + `
+    <div class="big">${item.q}</div>
+    <div class="hint" style="margin-top:6px">Gõ từ/cụm từ thay cho dấu <b>___</b> rồi bấm “Kiểm tra”.</div>
+    <div style="margin-top:10px">
+      <input type="text" id="ansInput" placeholder="Nhập đáp án..." autocomplete="off" />
+    </div>
+    <div class="row" style="justify-content:flex-start;gap:8px;margin-top:10px">
+      <button class="btn btn-emerald" id="checkBtn">Kiểm tra</button>
+      <button class="btn btn-emerald-ghost" id="playFill">🔊 Nghe câu</button>
+    </div>
+    <div id="reveal" class="hide" style="margin-top:10px"></div>
+  `;
+  card.querySelector("#playFill").addEventListener("click", ()=> speak(item.q.replace("___","...")));
+  const input = card.querySelector("#ansInput");
+  input.focus();
+
+  function check(){
+    const got = norm(input.value);
+    const accepts = (item.answers||[]).map(norm);
+    const ok = accepts.includes(got);
+    const box = card.querySelector("#reveal");
+    box.className = ok ? "win station" : "lose station";
+    box.innerHTML = `
+      <div>Kết quả: ${ok ? "Đúng ✅" : "Sai ❌"}</div>
+      <div class="hint">Đáp án chấp nhận: <b>${(item.answers||[]).join(" / ")}</b></div>
+      <div class="row" style="justify-content:flex-start;margin-top:10px;gap:8px">
+        <button class="btn btn-gray" id="nextBtn">Câu tiếp theo</button>
+        <button class="btn btn-emerald-ghost" id="homeNow">Về bản đồ</button>
+      </div>
+    `;
+    if(ok){ right++; givePoints(5); }
+    box.querySelector("#homeNow").addEventListener("click", finishStation, {once:true});
+    box.querySelector("#nextBtn").addEventListener("click", ()=>{
+      round++;
+      if(round >= 30){ finishStation(); return; }
+      renderRound();
+    }, {once:true});
+  }
+  card.querySelector("#checkBtn").addEventListener("click", check);
+  input.addEventListener("keydown", (e)=>{ if(e.key==="Enter") check(); });
+}
+
+document.getElementById("homeBtn").addEventListener("click", ()=>{ showScreen("map"); renderMap(); });
+document.getElementById("resetBtn").addEventListener("click", resetState);
+document.getElementById("maleBtn").addEventListener("click", ()=> pickByGender("male"));
+document.getElementById("femaleBtn").addEventListener("click", ()=> pickByGender("female"));
+document.getElementById("tryVoiceBtn").addEventListener("click", ()=> speak("Xin chào. Chúng ta bắt đầu giải cứu tiếng Việt nhé."));
+updateHUD(); renderMap(); showScreen("map");
+</script>
+</body>
+</html>
